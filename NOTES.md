@@ -84,6 +84,24 @@ One short paragraph per decision: what we chose and why. This becomes the README
 
 ---
 
+## The student (`sim/collect.py`, `sim/train_student.py`, `sim/student.py`)
+
+**Behaviour cloning, not reinforcement learning.** The student learns by copying: we record what the teacher does, then train a network to give the same answer for the same observation. It is ordinary supervised learning (like learning to label pictures from examples), so it trains in under a minute, gives the same result every run, and cannot discover odd reward-gaming tricks the way trial-and-error learning can.
+
+**Practice targets never overlap test targets.** The teacher is recorded on seeds 1000..2999 (2,000 episodes, 100,000 observation→action pairs). Testing uses seeds 0..99. So the student's score is always on targets it has never seen.
+
+**Wobble while recording (noise injection).** While recording, the arm is driven with the teacher's command plus a small random error (spread 0.1 on the −1..+1 scale), but we save the teacher's *clean* command. This pushes the arm slightly off course, so the recording also contains the teacher *correcting* mistakes. Without it, the student only ever sees perfect trajectories; the moment it makes a tiny error of its own, it is somewhere it has never seen and its errors pile up. Measured: a student trained on clean data had a *lower* training error but controlled the arm worse (average miss 0.27 cm, worst 1.73 cm) than the wobble-trained one (0.11 cm, worst 0.60 cm). Lesson: copying error on recorded data is not the same as control quality; only the closed-loop test counts.
+
+**Network: 10 → 64 → 64 → 2, ReLU.** Two hidden layers of 64 is plenty for a smooth 10-input function (it learns inverse kinematics plus gravity compensation implicitly) and has only 4,994 numbers (weights + biases), so INT8 it is about 5 KB, which fits easily on both the Pi and the ESP32. ReLU (keep positives, zero out negatives) is the cheapest activation to run and to quantize: no exponentials, just a comparison. The output layer has no activation; the command is clipped to −1..+1 afterwards, like the teacher's.
+
+**Input scaling.** Joint speeds can be around 10 while positions are around 0.5. Before the network, each input is shifted by its average and divided by its typical spread (both measured on the training data and saved with the weights), so all ten inputs sit around −1..+1. Networks learn much faster when inputs are on similar scales, and it will make quantization easier because one number range fits all inputs.
+
+**Training settings.** Loss = mean squared difference from the teacher's command. Adam optimiser, learning rate 1e-3 slowly lowered to 0 (cosine schedule), batches of 256, 60 passes over the data, fixed random seed. The last 10% of episodes are held back for validation: validation error (0.00025) stayed close to training error (0.00022), so the network learned the pattern rather than memorising examples.
+
+**PyTorch trains, NumPy runs.** The trained weights are saved as plain NumPy arrays (`models/student_float.npz`, committed so results are reproducible without retraining). `sim/student.py` runs the network with three hand-written multiply-and-add steps. This exact code is what gets quantized to INT8 and copied to the Pi, so the float and INT8 rows differ only by quantization. Checked: NumPy and PyTorch outputs match to within 7e-7.
+
+---
+
 ## Results so far (exo arm, 100 seeds)
 
 | Controller | Success | Final distance | Reward |
@@ -91,5 +109,6 @@ One short paragraph per decision: what we chose and why. This becomes the README
 | random | 0% | 54.58 ± 29.40 cm | −31.85 ± 12.94 |
 | do-nothing | 0% | 65.76 ± 28.70 cm | −32.83 ± 14.35 |
 | PD teacher | 100% | 0.03 ± 0.05 cm | −6.87 ± 4.08 |
+| float student | 100% | 0.11 ± 0.09 cm | −6.88 ± 4.08 |
 
-Random and do-nothing never reach a target: the floor. The teacher reaches all of them: the ceiling. Every later row (student, INT8, on-chip) lands somewhere between the two. Unlike Reacher, doing nothing does not win on reward here, because the effort penalty is small.
+Random and do-nothing never reach a target: the floor. The teacher reaches all of them: the ceiling. The float student matches the teacher on success, misses by ~1 mm on average (worst 0.6 cm), so copying the teacher into a network costs almost nothing. It leaves a 2.4 cm safety margin under the 3 cm line for quantization and delay to eat into. Every later row (INT8, on-chip) is measured against this one. Unlike Reacher, doing nothing does not win on reward here, because the effort penalty is small.

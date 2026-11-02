@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Kote: generated datasets (rebuild with sim/collect.py)
+data/

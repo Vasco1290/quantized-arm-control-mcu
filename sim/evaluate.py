@@ -8,6 +8,7 @@ Every controller in the project is judged here, with the same rules:
 import numpy as np
 
 from exo_arm_env import ExoArmEnv
+from student import student_policy
 from teacher import teacher_policy
 
 NUM_EPISODES = 100
@@ -52,17 +53,18 @@ def evaluate(policy, num_episodes=NUM_EPISODES):
 
 
 def print_row(name, r):
-    print(f"{name:<12} {100 * r['success']:>6.0f}%   "
+    print(f"{name:<14} {100 * r['success']:>6.0f}%   "
           f"{r['dist_mean_cm']:6.2f} +- {r['dist_std_cm']:5.2f} cm   "
           f"{r['reward_mean']:7.2f} +- {r['reward_std']:5.2f}")
 
 
 def main():
-    print(f"{'controller':<12} {'success':>7}   {'final distance':>18}   {'reward':>15}")
+    print(f"{'controller':<14} {'success':>7}   {'final distance':>18}   {'reward':>15}")
     for name, policy in [
         ("random", random_policy),
         ("do-nothing", do_nothing_policy),
         ("PD teacher", teacher_policy),
+        ("float student", student_policy),
     ]:
         print_row(name, evaluate(policy))
 
