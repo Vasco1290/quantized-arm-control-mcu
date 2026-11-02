@@ -21,13 +21,15 @@ LEARNING_RATE = 1e-3  # how big each nudge is
 HIDDEN = 64
 
 
-def main():
+def train(obs, act, rows_per_episode, model_path):
+    """Train a 64-64 network on (input -> teacher action) rows and save it as NumPy arrays.
+
+    Rows must be grouped by episode, `rows_per_episode` at a time. Works for any number of inputs.
+    """
     torch.manual_seed(0)  # same starting weights every run -> same result every run
-    d = np.load(DATA_PATH)
-    obs, act = d["obs"], d["act"]
 
     # Split by whole episodes, so validation targets are never seen in training.
-    n_val = int(len(obs) // EPISODE_LEN * VAL_FRACTION) * EPISODE_LEN
+    n_val = int(len(obs) // rows_per_episode * VAL_FRACTION) * rows_per_episode
     train_obs, val_obs = obs[:-n_val], obs[-n_val:]
     train_act, val_act = act[:-n_val], act[-n_val:]
 
@@ -43,7 +45,7 @@ def main():
     x_val, y_val = to_tensor(val_obs), torch.tensor(val_act)
 
     net = nn.Sequential(
-        nn.Linear(10, HIDDEN), nn.ReLU(),
+        nn.Linear(obs.shape[1], HIDDEN), nn.ReLU(),
         nn.Linear(HIDDEN, HIDDEN), nn.ReLU(),
         nn.Linear(HIDDEN, 2),
     )
@@ -69,16 +71,21 @@ def main():
 
     # Save as plain NumPy. PyTorch stores weights as (out, in); our NumPy code uses (in, out).
     layers = [m for m in net if isinstance(m, nn.Linear)]
-    MODEL_PATH.parent.mkdir(exist_ok=True)
-    np.savez(MODEL_PATH, in_mean=in_mean, in_std=in_std,
+    model_path.parent.mkdir(exist_ok=True)
+    np.savez(model_path, in_mean=in_mean, in_std=in_std,
              **{f"W{k + 1}": l.weight.detach().numpy().T for k, l in enumerate(layers)},
              **{f"b{k + 1}": l.bias.detach().numpy() for k, l in enumerate(layers)})
 
     # Check: the NumPy version must give the same answers as the PyTorch version.
     with torch.no_grad():
         torch_out = net(x_val).clamp(-1, 1).numpy()
-    numpy_out = Student(MODEL_PATH)(val_obs)
-    print(f"saved {MODEL_PATH}; NumPy vs PyTorch max difference: {np.abs(torch_out - numpy_out).max():.2e}")
+    numpy_out = Student(model_path)(val_obs)
+    print(f"saved {model_path}; NumPy vs PyTorch max difference: {np.abs(torch_out - numpy_out).max():.2e}")
+
+
+def main():
+    d = np.load(DATA_PATH)
+    train(d["obs"], d["act"], EPISODE_LEN, MODEL_PATH)
 
 
 if __name__ == "__main__":

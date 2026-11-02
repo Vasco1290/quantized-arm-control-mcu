@@ -132,6 +132,35 @@ One short paragraph per decision: what we chose and why. This becomes the README
 
 ---
 
+## Delay and lost messages (`sim/evaluate.py`, `sim/delay_student.py`, `sim/delay_sweep.py`)
+
+**A fake network on the laptop first.** Before touching hardware, the evaluation can put a pretend network between the controller and the motors: every command arrives k control steps late (1 step = 20 ms), or is lost with some chance. The motors keep using the last command that arrived (and get 0 before the first one). Which messages are lost depends only on the episode seed, so every controller faces exactly the same losses. With delay 0 and loss 0 the results are identical to the normal evaluation. This lets the whole delay/loss sweep run without the Pi, so the Pi only has to add real, measured timing on top.
+
+**Delay is far worse than lost messages.** With no delay, losing 30% of messages still leaves the student at 99%: holding the previous command for an extra 20 ms barely matters. But just 20 ms of delay drops every plain controller to ~75–79%, 40 ms to 9–29%, and 60 ms to 4–11%. Even the teacher fails. The reason is the same "brake held too long" effect found in the gain scan: the controller reacts to where the arm *was*, the correction lands late, the arm overshoots, and the next late correction makes it worse. A WiFi round trip to a Pi can easily be 20 ms or more, so this is the central problem for the hardware loop.
+
+**Delay-trained student: plan for the late arrival.** With delay k, a command sent now lands k steps later, and in between the arm is pushed by the k commands already on their way. So the delay-trained student gets the observation *plus those k in-flight commands* (it remembers what it sent; 10 + 2k inputs), and is trained to output what the teacher would do *at the moment its command lands*. The teacher is privileged here too: in simulation we can drive the arm the way a perfect delay-compensating controller would (0 for the first k steps, then exactly the teacher's command at each step) and label each row with the teacher's command k steps in the future. Same network size, same training, one student per delay (20–100 ms).
+
+**Result: 100% at every matched delay up to 100 ms.** Where the plain student falls to 79 / 29 / 11 / 2 / 2%, the delay-trained student built for that delay stays at 100% with an average miss of 0.15–0.19 cm. Here **the student beats its own teacher**, because the teacher only reacts to the present, while the student has learned to look ahead.
+
+**Weakness: it only works at the delay it was built for.** Tested at the wrong delay, the delay-trained students drop sharply (e.g. the 20 ms student: 12% at 0 ms, 14% at 40 ms; the 60 ms student: 24–60% elsewhere). It has learned one exact timing, not "delay in general". A real WiFi delay changes from message to message, so used naively this would fail on hardware.
+
+**Fix for the hardware loop: a fixed-delay buffer.** Measure the real round-trip delay, pick k steps safely above the worst case, and have the laptop hold every arriving command until exactly k steps after it was sent. The delay the controller experiences is then always exactly k (where the matched student gets 100%), and any message later than that is simply treated as lost. The loss test shows that is affordable: the delay-trained student keeps 96–100% with up to 30% of messages lost (20 ms and 60 ms tested). This trades a little extra delay for a delay that never changes, the same idea as the jitter buffer in a video call.
+
+**Lost messages also hurt the delay-trained student a little more.** When a message is lost, the student's memory of "what I sent" no longer matches what the motors actually did. At 30% loss it drops to 96% (from 100%), while staying far above the plain student (71% at 20 ms, 5% at 60 ms).
+
+| Delay | teacher | float student | INT8 student | delay-trained (matched) |
+|---|---|---|---|---|
+| 0 ms | 100% | 100% | 100% | 100% (= float student) |
+| 20 ms | 75% | 79% | 78% | 100% |
+| 40 ms | 9% | 29% | 22% | 100% |
+| 60 ms | 4% | 11% | 5% | 100% |
+| 80 ms | 2% | 2% | 0% | 100% |
+| 100 ms | 1% | 2% | 3% | 100% |
+
+Full numbers (including the wrong-delay table and the loss sweep) in `results/delay_sweep.csv`. Not done yet: an INT8 version of the delay-trained student (needed if it runs on the Pi).
+
+---
+
 ## Results so far (exo arm, 100 seeds)
 
 | Controller | Success | Final distance | Reward |
