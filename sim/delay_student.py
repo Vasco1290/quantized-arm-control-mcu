@@ -60,9 +60,9 @@ def collect_delayed(k):
 class DelayStudent:
     """Controller with a short memory: it remembers the last k commands it sent."""
 
-    def __init__(self, k, path=None):
+    def __init__(self, k, path=None, net=None):
         self.k = k
-        self.net = Student(path or model_path(k))
+        self.net = net or Student(path or model_path(k))  # net: any network, e.g. the INT8 one
 
     def reset(self):
         # At the start nothing has been sent; the motors are getting 0, so remember zeros.

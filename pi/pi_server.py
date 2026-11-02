@@ -2,7 +2,7 @@
 
 Needs only Python 3 and NumPy (on the Pi:  sudo apt install python3-numpy).
 On the Pi, keep these in one folder:  pi_server.py, protocol.py, int8_net.py, student.py,
-and a models/ folder with student_int8.npz and student_delay*.npz.
+and a models/ folder with student_int8.npz and student_delay*_int8.npz.
 
   On the Pi:                    python3 pi_server.py
   Stand-in "Pi" on the laptop:  python pi/pi_server.py
@@ -55,11 +55,16 @@ class DelayController:
 
 
 def load_controllers(models_dir):
+    """Every controller runs in INT8. A delay student falls back to float only if its INT8 file is missing."""
     controllers = {0: PlainController(Int8Student(models_dir / "student_int8.npz"))}
     for k in range(1, 6):
-        path = models_dir / f"student_delay{k}.npz"
-        if path.exists():
-            controllers[k] = DelayController(k, Student(path))
+        int8_path = models_dir / f"student_delay{k}_int8.npz"
+        float_path = models_dir / f"student_delay{k}.npz"
+        if int8_path.exists():
+            controllers[k] = DelayController(k, Int8Student(int8_path))
+        elif float_path.exists():
+            print(f"note: delay{k} has no INT8 file, running it in float")
+            controllers[k] = DelayController(k, Student(float_path))
     return controllers
 
 

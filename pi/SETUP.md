@@ -44,7 +44,7 @@ Use `apt`, not `pip`: the Pi Zero's processor (ARMv6) has no ready-made pip pack
 
 ```bash
 scp pi/pi_server.py pi/protocol.py sim/int8_net.py sim/student.py <user>@kote-pi.local:~/kote/
-scp models/student_int8.npz models/student_delay1.npz models/student_delay2.npz models/student_delay3.npz models/student_delay4.npz models/student_delay5.npz <user>@kote-pi.local:~/kote/models/
+scp models/student_int8.npz models/student_delay1_int8.npz models/student_delay2_int8.npz models/student_delay3_int8.npz models/student_delay4_int8.npz models/student_delay5_int8.npz <user>@kote-pi.local:~/kote/models/
 ```
 
 ## 6. Start the server (on the Pi)

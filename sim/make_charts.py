@@ -8,6 +8,7 @@ import csv
 from pathlib import Path
 
 import matplotlib
+import matplotlib.ticker
 
 matplotlib.use("Agg")  # draw straight to files, no window
 import matplotlib.pyplot as plt
@@ -134,8 +135,75 @@ def loop_diagram(theme, out):
     plt.close(fig)
 
 
+def timing_chart(theme, messages_csv, title, out):
+    """Histogram of round-trip times from one hardware run, with the buffer deadlines marked.
+
+    The question it answers: "if the buffer waits k x 20 ms, what share of answers make it in time?"
+    """
+    import numpy as np
+
+    with open(messages_csv, newline="") as f:
+        rows = list(csv.DictReader(f))
+    rtt = np.array([float(r["rtt_ms"]) for r in rows if r["rtt_ms"]])
+    comp = np.array([float(r["compute_us"]) for r in rows if r["compute_us"]])
+    no_answer = 100 * (1 - len(rtt) / len(rows))
+
+    t = THEMES[theme]
+    fig, ax = plt.subplots(figsize=(8, 4.4), dpi=100)
+    fig.patch.set_facecolor(t["surface"])
+    ax.set_facecolor(t["surface"])
+
+    right = max(50, 10 * np.ceil(np.percentile(rtt, 99.5) / 10))  # x-axis end, in steps of 10 ms
+    beyond = 100 * np.mean(rtt > right)                            # answers slower than the axis shows
+    bins = np.arange(0, right + 1, 1.0 if right <= 60 else 2.0)
+    weights = np.full(len(rtt), 100 / len(rows))                   # each bar = % of all messages sent
+    ax.hist(np.minimum(rtt, right), bins=bins, weights=weights, color=t["series"][0],
+            edgecolor=t["surface"], linewidth=1.0)
+
+    top = ax.get_ylim()[1]
+    for k in (1, 2, 3):
+        x = 20 * k
+        if x >= right:
+            break
+        within = 100 * np.mean(rtt <= x) * len(rtt) / len(rows)
+        ax.axvline(x, color=t["muted"], lw=1.2, ls=(0, (4, 3)))
+        ax.text(x + 0.8, top * 0.95, f"buffer k={k} ({x} ms)\n{within:.1f}% in time",
+                color=t["ink2"], fontsize=9.5, va="top", linespacing=1.35,
+                bbox=dict(fc=t["surface"], ec="none", pad=1.5))  # keeps grid lines out of the text
+
+    ax.grid(axis="y", color=t["grid"], lw=0.8)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(t["axis"])
+    ax.tick_params(colors=t["muted"], length=0, labelsize=10, pad=6)
+    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}%"))
+    ax.set_xlim(0, right)
+    ax.set_xlabel("round trip: observation sent → command back (ms)", color=t["ink2"], fontsize=10, labelpad=8)
+    ax.set_ylabel("share of messages", color=t["ink2"], fontsize=10, labelpad=8)
+
+    stats = (f"median {np.median(rtt):.1f} ms · 99% {np.percentile(rtt, 99):.1f} ms · "
+             f"worst {rtt.max():.1f} ms · no answer {no_answer:.1f}%"
+             + (f" · slower than {right:.0f} ms {beyond:.1f}%" if beyond > 0 else "")
+             + f"\nnetwork on the chip: mean {comp.mean():.0f} µs, worst {comp.max():.0f} µs"
+             + f" · {len(rows)} messages")
+    ax.text(0.0, 1.17, title, transform=ax.transAxes, color=t["ink"], fontsize=14, weight="bold")
+    ax.text(0.0, 1.03, stats, transform=ax.transAxes, color=t["ink2"], fontsize=10, linespacing=1.4)
+
+    fig.savefig(out, dpi=200, facecolor=t["surface"], bbox_inches="tight", pad_inches=0.3)
+    plt.close(fig)
+
+
+# Timing chart source: the real-Pi run with realistic pacing (one message every 20 ms) if it exists.
+TIMING_RUNS = [RESULTS / "hw" / "pi_int8_asap_loss0_messages.csv",
+               RESULTS / "hw" / "pi_int8_lockstep_loss0_messages.csv"]
+
+
 def main():
+    run = next((p for p in TIMING_RUNS if p.exists()), None)
     for theme in THEMES:
+        if run is not None:
+            timing_chart(theme, run, "How long does the Pi take to answer?", MEDIA / f"timing_chart_{theme}.png")
         loop_diagram(theme, MEDIA / f"loop_diagram_{theme}.png")
         line_chart(theme,
                    "How few bits can the controller use?",
@@ -150,7 +218,7 @@ def main():
                    [0, 20, 40, 60, 80, 100],
                    "Delay-trained student: 100% at every delay\n(each one built for the delay it is tested at)",
                    (36, 80), MEDIA / f"delay_chart_{theme}.png")
-    print("saved charts to", MEDIA)
+    print("saved charts to", MEDIA, "" if run else "(no real-Pi run yet, so no timing chart)")
 
 
 if __name__ == "__main__":

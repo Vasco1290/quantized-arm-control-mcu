@@ -157,7 +157,9 @@ One short paragraph per decision: what we chose and why. This becomes the README
 | 80 ms | 2% | 2% | 0% | 100% |
 | 100 ms | 1% | 2% | 3% | 100% |
 
-Full numbers (including the wrong-delay table and the loss sweep) in `results/delay_sweep.csv`. Not done yet: an INT8 version of the delay-trained student (needed if it runs on the Pi).
+Full numbers (including the wrong-delay table and the loss sweep) in `results/delay_sweep.csv`. 
+
+**INT8 delay-trained students (`sim/quantize_delay.py`).** Same recipe as the plain INT8 student (one scale per tensor, ranges measured on the training inputs), only the input is bigger: 10 observation numbers plus the 2k remembered commands. Result at the matched delay: 100% at every delay (20–100 ms), average miss 0.35–0.42 cm vs 0.15–0.19 cm in float — the same "about 2× bigger miss, no lost targets" cost as for the plain student. The integer runner matches the 8-bit simulation to ~1e-8. So the chip now runs *every* controller in INT8; the float delay files are only a fallback.
 
 ---
 
@@ -171,19 +173,21 @@ Full numbers (including the wrong-delay table and the loss sweep) in `results/de
 
 **Three rules for using the answers.** *Lockstep*: wait for each answer before moving on (the arm "pauses"; not realistic, but it proves the chip computes the same answers as the laptop, and measures pure round-trip time). *ASAP*: at the start of each step, use the newest answer that has arrived; the delay is at least one step (20 ms) and varies with the network. *Buffer*: the answer to step t is used at exactly step t+k; anything later counts as lost. The command is always chosen at the start of a step from answers that already arrived (a first version also used answers arriving within the same step, which mixed zero-delay and one-step-delay steps and made results not comparable with the simulation).
 
-**Tested against the simulation's predictions (stand-in Pi on the laptop, 20 episodes):**
+**Tested against the simulation's predictions (stand-in Pi on the laptop, all 100 test episodes, every controller INT8):**
 
 | Setup | Loop result | Simulation predicted |
 |---|---|---|
-| INT8, lockstep | 100%, 0.24 ± 0.12 cm | 100%, 0.24 ± 0.12 cm (no delay) |
-| INT8, ASAP (round trip ~1 ms → 1 step) | 55%, 2.48 cm | 55%, 2.48 cm (20 ms delay) |
-| delay-trained 20 ms, buffer k=1 | 100%, 0.16 cm | 100%, 0.16 cm |
+| INT8, lockstep | 100%, 0.27 ± 0.16 cm | 100%, 0.27 ± 0.16 cm (no delay) |
+| INT8, ASAP (round trip ~1 ms → 1 step) | 78%, 1.74 ± 1.72 cm | 78%, 1.75 ± 1.73 cm (20 ms delay) |
+| INT8 delay-trained 20 ms, buffer k=1 | 100%, 0.35 ± 0.16 cm | 100%, 0.35 ± 0.16 cm |
 
-The loop matches the simulation exactly, so the simulated delay sweep is a trustworthy prediction of the hardware, and any difference on the real Pi will come from its real timing.
+The loop matches the simulation (ASAP to within 0.01 cm; the laptop fell slightly behind schedule on 74 of 5,000 steps). "Answer used 98%" in the log is expected: the answer to the last step of an episode arrives after the episode has ended. So the simulated delay sweep is a trustworthy prediction of the hardware, and any difference on the real Pi will come from its real timing.
 
-**Slow, jittery pretend network (round trip 36 ms on average, up to 60 ms):** plain INT8 in ASAP mode fell to 30% (its delay kept changing between 1 and 3 steps). Delay-trained student behind a 40 ms buffer: 100% (0.61 cm), even though 43% of answers arrived too late and were thrown away. Behind a 60 ms buffer: 100% (0.19 cm), 94% of answers used. This confirms the plan: measure the real round trip, choose k so that k × 20 ms is above its 99th percentile, and use the delay-trained student built for k.
+**Slow, jittery pretend network** (stand-in holds each answer 36 ± 24 ms; measured round trip median 40 ms, 99% 63 ms, worst 76 ms): plain INT8 in ASAP mode fell to 6% (its delay kept changing between 1 and 4 steps). Delay-trained student behind a 40 ms buffer (k=2): 74%, 2.88 cm, because 60% of answers arrived too late and were thrown away. Behind a 60 ms buffer (k=3): 100%, 0.57 cm, with 79% of answers used. This confirms the plan: measure the real round trip, choose k so that k × 20 ms covers almost all answers, and use the delay-trained student built for that k. (The student copes with ~20% of answers missing but not 60%: every missing answer means the motors repeat an old command, and the student's memory of "what I sent" no longer matches what landed.)
 
-**Timing recorded for every message:** round-trip time (mean, median, 99th percentile, worst, and spread = jitter), how long the chip took to compute the answer (measured on the chip), whether the answer arrived at all, and how many steps later it was used. On the laptop stand-in, computing one answer takes ~0.15 ms; the Pi Zero is expected to be several times slower but still far below the 20 ms step.
+**Lesson about sample size:** a first version of these tests used 20 episodes and gave 55% for ASAP and 100% for the 40 ms buffer. On all 100 episodes they are 78% and 74%. 20 episodes is too few to trust; every reported number now uses the full 100.
+
+**Timing recorded for every message:** round-trip time (mean, median, 99th percentile, worst, and spread = jitter), how long the chip took to compute the answer (measured on the chip), whether the answer arrived at all, and how many steps later it was used. On the laptop stand-in, computing one answer takes ~0.2 ms; the Pi Zero is expected to be several times slower but still far below the 20 ms step.
 
 ---
 
