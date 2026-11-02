@@ -111,9 +111,19 @@ Running a quantized neural-network controller on a small chip is not new; Kote d
 
 ## Run it
 
-Windows, Python 3.12:
+Python 3.12. Commands below are for Windows; on **macOS / Linux** replace `.venv/Scripts/python.exe` with `.venv/bin/python` everywhere:
 
 ```bash
+# macOS / Linux setup
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python sim/collect.py   # ...and so on, same scripts as below
+```
+
+On macOS, change `torch==2.15.0+cpu` to `torch==2.15.0` in `requirements.txt` first (the `+cpu` builds exist for Windows and Linux only), and run the live viewer with `.venv/bin/mjpython sim/watch.py teacher` (MuJoCo's viewer needs `mjpython` on macOS).
+
+```bash
+# Windows
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt
 .venv/Scripts/python.exe sim/collect.py         # record the teacher (data/, ~10 s)
@@ -129,7 +139,7 @@ python -m venv .venv
 .venv/Scripts/python.exe sim/watch.py teacher   # watch in the 3D viewer
 ```
 
-Hardware loop with a stand-in "Pi" on the same laptop (two terminals):
+Hardware loop with a stand-in "Pi" on the same laptop (two terminals; on macOS / Linux use `.venv/bin/python`):
 
 ```bash
 .venv/Scripts/python.exe pi/pi_server.py                                   # terminal 1: the "chip"
