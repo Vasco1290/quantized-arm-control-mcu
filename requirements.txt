@@ -11,6 +11,8 @@ numpy==2.5.4
 packaging==26.3
 pillow==13.0.0
 PyOpenGL==3.1.10
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu
 typing_extensions==4.16.0
 websockets==17.4
 zipp==4.1.2

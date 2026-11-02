@@ -33,7 +33,7 @@
     <light name="key" directional="true" pos="1 -2 3" dir="-0.3 0.6 -1" castshadow="true" diffuse="0.75 0.75 0.75" specular="0.3 0.3 0.3"/>
     <light name="fill" directional="true" pos="-2 -1 2" dir="0.6 0.3 -0.6" castshadow="false" diffuse="0.25 0.25 0.3"/>
     <geom name="floor" type="plane" size="3 3 0.1" material="floor"/>
-    <camera name="side" pos="0.1 -1.7 1.05" xyaxes="1 0 0 0 0.1 1"/>
+    <camera name="side" pos="0.15 -2.1 1.12" xyaxes="1 0 0 0 0 1"/>
 
     <!-- Seated wearer (static, visual only) -->
     <geom name="stool_seat" type="cylinder" pos="0 0.21 0.44" size="0.2 0.025" material="exo_metal"/>
