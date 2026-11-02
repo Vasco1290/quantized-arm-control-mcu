@@ -14,12 +14,10 @@ A simulated exoskeleton-style arm (MuJoCo, with gravity) controlled by a small n
 4. **Quantization:** the student is converted to INT8 (and lower bit-widths) with our own NumPy code.
 5. **Hardware loop (planned):** the laptop runs the simulator, sends observations to the chip, and the chip sends back motor commands.
 
-```mermaid
-flowchart LR
-    sim["Laptop<br/>MuJoCo arm simulation"] -- "observation<br/>(10 numbers)" --> chip["Pi Zero W<br/>INT8 network"]
-    chip -- "motor command<br/>(2 numbers)" --> buf["Laptop<br/>fixed-delay buffer"]
-    buf -- "applied every 20 ms" --> sim
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="media/loop_diagram_dark.png">
+  <img src="media/loop_diagram_light.png" width="720" alt="Diagram of the hardware loop: the laptop's MuJoCo arm simulation sends an observation of 10 numbers to the Pi Zero W, which runs the 5.4 KB INT8 network and sends a motor command of 2 numbers back to a fixed-delay buffer on the laptop, which applies it to the simulated motors every 20 ms.">
+</picture>
 
 ## Results so far (exo arm, same 100 seeded episodes)
 
@@ -109,12 +107,8 @@ python -m venv .venv
 | `sim/delay_student.py` | Delay-trained students (one per delay, 20–100 ms) → `models/student_delay*.npz` |
 | `sim/delay_sweep.py` | Simulated delay, wrong-delay and lost-message tests → `results/delay_sweep.csv` |
 | `sim/evaluate.py` | Scores any controller on seeds 0..99, optionally through a simulated delayed / lossy network |
-| `sim/make_charts.py` | Draws the precision and delay charts (light + dark) from the CSV results |
+| `sim/make_charts.py` | Draws the loop diagram and the precision and delay charts (light + dark) |
 | `sim/make_gifs.py` | Records the README GIFs from the side camera |
 | `sim/watch.py` | Plays a controller in the live 3D window |
 | `sim/random_reacher.py` | Reacher-v5 warm-up (random baseline) |
 | `NOTES.md` | Design decisions, one paragraph each |
-
-## Note
-
-Code is written with AI assistance (Claude); every design decision is documented and explained in `NOTES.md`.

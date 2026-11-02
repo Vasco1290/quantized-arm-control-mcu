@@ -96,8 +96,47 @@ def delay_series():
     return out
 
 
+def loop_diagram(theme, out):
+    """The hardware loop as a picture (an image works everywhere; GitHub's live diagrams can be blocked)."""
+    from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+    t = THEMES[theme]
+    box_fill = "#eef4fc" if theme == "light" else "#1f2a38"
+    fig, ax = plt.subplots(figsize=(9, 2.7), dpi=100)
+    fig.patch.set_facecolor(t["surface"])
+    ax.set_facecolor(t["surface"])
+    ax.set_xlim(0, 9)
+    ax.set_ylim(0, 2.7)
+    ax.axis("off")
+
+    boxes = [  # (centre x, title, detail)
+        (1.25, "Laptop", "MuJoCo arm simulation"),
+        (4.5, "Pi Zero W", "INT8 network (5.4 KB)"),
+        (7.75, "Laptop", "fixed-delay buffer"),
+    ]
+    w, h, y = 2.3, 0.95, 1.55
+    for cx, title, detail in boxes:
+        ax.add_patch(FancyBboxPatch((cx - w / 2, y - h / 2), w, h, boxstyle="round,pad=0,rounding_size=0.12",
+                                    fc=box_fill, ec=t["series"][0], lw=1.4))
+        ax.text(cx, y + 0.15, title, ha="center", va="center", color=t["ink"], fontsize=12, weight="bold")
+        ax.text(cx, y - 0.18, detail, ha="center", va="center", color=t["ink2"], fontsize=10.5)
+
+    def arrow(p, q, label, label_xy, **kw):
+        ax.add_patch(FancyArrowPatch(p, q, arrowstyle="-|>", mutation_scale=14, color=t["muted"], lw=1.4, **kw))
+        ax.text(*label_xy, label, ha="center", va="center", color=t["ink2"], fontsize=10)
+
+    arrow((1.25 + w / 2, y), (4.5 - w / 2, y), "observation\n(10 numbers)", (2.875, y + 0.78))
+    arrow((4.5 + w / 2, y), (7.75 - w / 2, y), "motor command\n(2 numbers)", (6.125, y + 0.78))
+    arrow((7.75, y - h / 2), (1.25, y - h / 2), "applied to the motors every 20 ms", (4.5, 0.32),
+          connectionstyle="arc3,rad=-0.15")
+
+    fig.savefig(out, dpi=200, facecolor=t["surface"], bbox_inches="tight", pad_inches=0.15)
+    plt.close(fig)
+
+
 def main():
     for theme in THEMES:
+        loop_diagram(theme, MEDIA / f"loop_diagram_{theme}.png")
         line_chart(theme,
                    "How few bits can the controller use?",
                    "Part of the network rounded to N bits · 100 test reaches per point · success = hand within 3 cm",
