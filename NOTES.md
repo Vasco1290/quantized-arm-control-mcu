@@ -102,6 +102,36 @@ One short paragraph per decision: what we chose and why. This becomes the README
 
 ---
 
+## Quantization (`sim/quantize.py`, `sim/int8_net.py`, `sim/precision_sweep.py`)
+
+**The idea.** Instead of storing a real number like 0.4173 (32 bits), store a small whole number q plus one shared "scale" s for the whole tensor, so real value ≈ q × s. With 8 bits, q runs from −127 to +127. The scale is chosen so the biggest value in the tensor lands on ±127; everything else is rounded to the nearest step. Fewer bits = fewer steps = coarser rounding. Small whole numbers are what cheap chips are fast at, and they take 4× less memory.
+
+**Our own code, not a library.** The whole scheme is ~100 lines of NumPy. Doing it by hand means every number on the chip can be explained, and the same maths can be rewritten in C for the ESP32 line by line. Libraries (PyTorch, TFLite) hide the choices this project wants to measure.
+
+**Symmetric, per-tensor, post-training — the simplest scheme first.** One scale per tensor (not per row or per input), zero always maps exactly to 0, and the network is quantized *after* training without retraining. If the simplest scheme already works at 8 bits, that is the result; refinements are only worth it where it breaks.
+
+**Ranges measured on recorded data (calibration).** Weights are fixed, so their biggest value is known. The values flowing *through* the network depend on the input, so we run the float network on the 100,000 recorded teacher observations and note the biggest value seen at the input (5.8 after scaling) and after each hidden layer (4.0 and 3.1). Those set the scales. We use the plain maximum; an outlier would waste grid steps, which is one thing to try if needed.
+
+**The integer runner (`int8_net.py`).** Inside each layer it does only whole-number work: int8 inputs × int8 weights, summed into a 32-bit whole number (a sum of 64 products of up to 127 × 127 cannot fit in 8 bits), plus a bias stored as a 32-bit whole number. Between layers, one multiplication by a real-number scale converts the sum back and re-rounds it onto the next layer's int8 grid. It imports nothing but NumPy, so it can be copied to the Pi as-is. Model size: 5,384 bytes (float32: 19,976).
+
+**Biases are rounded too, and the simulation must match.** At first the rounding simulation kept biases exact, and the integer runner differed from it on 15% of outputs. The cause was real: the runner stores biases on a fine integer grid, and that tiny rounding occasionally tips a hidden value across a rounding boundary. We made the simulation round biases the same way; now the two agree to 2e-9. This matters because the sweep uses the simulation to predict what the hardware does.
+
+**Precision sweep: round one part at a time.** At 8, 6, 4, 3 and 2 bits, we rounded only the weights, only the 10 inputs, only the in-between (hidden) values, then everything, and ran the usual 100-episode test each time.
+
+| Bits | weights only | inputs only | hidden only | everything |
+|---|---|---|---|---|
+| 8 | 100% / 0.19 cm | 100% / 0.22 cm | 100% / 0.18 cm | 100% / 0.27 cm |
+| 6 | 99% / 0.64 cm | 100% / 0.66 cm | 100% / 0.56 cm | 98% / 0.97 cm |
+| 4 | 51% / 3.49 cm | 40% / 3.43 cm | 75% / 2.41 cm | 32% / 4.40 cm |
+| 3 | 1% / 22.8 cm | 1% / 14.3 cm | 22% / 6.48 cm | 0% / 42.5 cm |
+| 2 | 2% / 28.1 cm | 0% / 38.0 cm | 3% / 51.3 cm | 0% / 65.8 cm |
+
+(success rate / average final distance; float student = 100% / 0.11 cm)
+
+**What the sweep says.** (1) 8 bits costs nothing on success; the average miss grows from 0.11 to 0.27 cm. (2) 6 bits is still fine (98%). (3) The break point is between 6 and 4 bits: at 4 bits success falls to 32%. This matches QuaRL's finding that 6–8 bits is safe after training. (4) **Rounding only the inputs hurts about as much as rounding only the weights** (40% vs 51% at 4 bits), which supports the claim in arXiv 2511.07046 that input quantization matters on its own. Likely reason: with one scale for all 10 inputs, the input with the biggest range sets the step size for all of them, so small but important inputs (hand-minus-target near the goal) get rounded coarsely. (5) The hidden values are the most tolerant. (6) At 2 bits everything, the network outputs nothing useful at all: its final distance equals do-nothing exactly. Untried improvements, if time allows: a separate scale per input, and training with rounding in the loop (quantization-aware training), which 2511.07046 uses to reach 2–3 bits.
+
+---
+
 ## Results so far (exo arm, 100 seeds)
 
 | Controller | Success | Final distance | Reward |
@@ -110,5 +140,6 @@ One short paragraph per decision: what we chose and why. This becomes the README
 | do-nothing | 0% | 65.76 ± 28.70 cm | −32.83 ± 14.35 |
 | PD teacher | 100% | 0.03 ± 0.05 cm | −6.87 ± 4.08 |
 | float student | 100% | 0.11 ± 0.09 cm | −6.88 ± 4.08 |
+| INT8 student (integer runner) | 100% | 0.27 ± 0.16 cm | −6.94 ± 4.05 |
 
-Random and do-nothing never reach a target: the floor. The teacher reaches all of them: the ceiling. The float student matches the teacher on success, misses by ~1 mm on average (worst 0.6 cm), so copying the teacher into a network costs almost nothing. It leaves a 2.4 cm safety margin under the 3 cm line for quantization and delay to eat into. Every later row (INT8, on-chip) is measured against this one. Unlike Reacher, doing nothing does not win on reward here, because the effort penalty is small.
+Random and do-nothing never reach a target: the floor. The teacher reaches all of them: the ceiling. The float student matches the teacher on success, misses by ~1 mm on average (worst 0.6 cm), so copying the teacher into a network costs almost nothing. It leaves a 2.4 cm safety margin under the 3 cm line for quantization and delay to eat into. The INT8 student (integer maths, 3.7× smaller) still reaches every target; its worst miss grows from 0.6 to 1.22 cm, so INT8 uses up about a quarter of that margin. The on-chip rows are measured against these two. Unlike Reacher, doing nothing does not win on reward here, because the effort penalty is small.

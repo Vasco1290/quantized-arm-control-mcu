@@ -8,6 +8,7 @@ Every controller in the project is judged here, with the same rules:
 import numpy as np
 
 from exo_arm_env import ExoArmEnv
+from int8_net import int8_policy
 from student import student_policy
 from teacher import teacher_policy
 
@@ -65,6 +66,7 @@ def main():
         ("do-nothing", do_nothing_policy),
         ("PD teacher", teacher_policy),
         ("float student", student_policy),
+        ("INT8 student", int8_policy),
     ]:
         print_row(name, evaluate(policy))
 
