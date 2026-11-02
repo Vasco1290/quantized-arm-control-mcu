@@ -2,7 +2,7 @@
 
 A simulated exoskeleton-style arm (MuJoCo, with gravity) controlled by a small neural network that is shrunk to 8-bit integers (INT8) and run on real low-power chips (Raspberry Pi Zero W, then ESP32-S3), with the simulator on a laptop in the loop. The goal is to measure where control quality breaks: lower precision, network delay, lost messages, and Linux board vs bare microcontroller.
 
-> **Status: work in progress (2 Nov 2026).** The arm, the environment and the baselines are done. The teacher controller, the student network, quantization and the hardware loop are next. Results below are only the baselines so far.
+> **Status: work in progress (2 Nov 2026).** The arm, the environment, the baselines and the teacher controller are done. The student network, quantization and the hardware loop are next.
 
 ## How it works (planned)
 
@@ -18,8 +18,9 @@ Success = hand within 3 cm of the target after 1 second. This threshold is fixed
 
 | Controller | Success | Final distance | Reward |
 |---|---|---|---|
-| random | 0% | 54.6 ± 29.4 cm | −31.85 ± 12.94 |
-| do-nothing | 0% | 65.8 ± 28.7 cm | −32.83 ± 14.35 |
+| random | 0% | 54.58 ± 29.40 cm | −31.85 ± 12.94 |
+| do-nothing | 0% | 65.76 ± 28.70 cm | −32.83 ± 14.35 |
+| PD teacher | 100% | 0.03 ± 0.05 cm | −6.87 ± 4.08 |
 
 Reward is reported last on purpose: on the Reacher warm-up, doing nothing beat random on reward without ever reaching a target. See [NOTES.md](NOTES.md) for every design decision and why.
 
@@ -31,7 +32,7 @@ Windows, Python 3.12:
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt
 .venv/Scripts/python.exe sim/evaluate.py        # baseline table
-.venv/Scripts/python.exe sim/watch.py random    # watch in the 3D viewer
+.venv/Scripts/python.exe sim/watch.py teacher   # watch in the 3D viewer
 ```
 
 ## Files
@@ -40,6 +41,7 @@ python -m venv .venv
 |---|---|
 | `sim/exo_arm.xml` | The arm, exoskeleton parts, seated wearer and scene (MuJoCo model) |
 | `sim/exo_arm_env.py` | Gymnasium environment: start pose, targets, observations, reward |
+| `sim/teacher.py` | Teacher controller: inverse kinematics + PD + gravity compensation |
 | `sim/evaluate.py` | Scores any controller on seeds 0..99 |
 | `sim/watch.py` | Plays a controller in the live 3D window |
 | `sim/random_reacher.py` | Reacher-v5 warm-up (random baseline) |

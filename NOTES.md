@@ -62,19 +62,34 @@ One short paragraph per decision: what we chose and why. This becomes the README
 
 **The teacher may peek, the student may not.** Controllers are functions `(obs, env) -> action`. The teacher (PD + gravity compensation) is allowed to read the true simulator state, including gravity torques. The student network later sees only the 10 observation numbers.
 
-## Baselines on the exo arm (100 seeds)
+---
 
-| Controller | Success | Final distance | Reward |
-|---|---|---|---|
-| random | 0% | 54.6 ± 29.4 cm | −31.85 ± 12.94 |
-| do-nothing | 0% | 65.8 ± 28.7 cm | −32.83 ± 14.35 |
+## The teacher (`sim/teacher.py`)
 
-Neither reaches a single target: this is the floor of the results table. Unlike Reacher, doing nothing does not win on reward here, because the effort penalty is small.
+**Why a classical teacher, not reinforcement learning.** A hand-built controller that we fully understand gives a known-good "ceiling" in one evening, with no training. The student network then only has to *copy* it (behaviour cloning), which is much faster and more reliable than learning by trial and error. Any drop in quality after that is caused by the network, quantization or hardware, not by a weak teacher.
+
+**Three parts, every 0.02 s.** (1) Inverse kinematics turns the target position into the two joint angles that put the hand there. (2) PD pulls each joint toward its goal angle. (3) Gravity compensation adds exactly the torque gravity is taking away. The sum, divided by the gear, is the motor command.
+
+**Inverse kinematics in two steps.** Elbow first: the upper arm, the forearm and the line from shoulder to target form a triangle, and the law of cosines gives the elbow angle from the three side lengths (far target = straighter elbow). Then the shoulder: point the upper arm at the target, then lean back by the extra angle the bent elbow adds. Only the elbow-forward answer is used, because our elbow cannot bend the other way. Checked on 20,000 random poses: going angles → position → angles returns the same angles (error ~1e-10°).
+
+**Gravity compensation = making the arm weightless.** MuJoCo can tell us, at any pose, exactly how much torque gravity is putting on each joint (`qfrc_bias`, which also includes small effects from the arm's own speed). Adding that much torque cancels gravity, so the arm would float still wherever it is. The PD part then only has to move a "weightless" arm. This is the part the teacher is allowed to "peek" at: the student never sees `qfrc_bias` and has to learn the effect from the 10 observation numbers.
+
+**PD = a spring plus a brake.** P (proportional): push = KP × (goal angle − current angle). It is like a spring: far from the goal it pushes hard, close to it gently. D (derivative): push = −KD × joint speed. It is like a shock absorber: it resists motion, so the arm slows down as it arrives instead of overshooting and wobbling.
+
+**Gains: KP = 60 / 20, KD = 8 / 2 (shoulder / elbow), from a scan.** We tried the spring at 0.5×, 1×, 1.5×, 2.5× and the brake at 0.5×, 1×, 2× (100 seeds each). The chosen setting reached 100% with an average miss of 0.03 cm, arriving in ~0.37 s, with the motor at its limit on 8% of steps. A stiffer spring also worked (still 100% at 2.5×) but maxed out the motor more often (20%). A **brake twice as strong failed badly** (0–55% success). The reason: the command is held for 0.02 s between updates, and a very strong brake pushes so hard during that hold that it reverses the motion; the next update brakes the other way, and the arm chatters. Our chosen brake is only about 2× away from that edge. Extra delay (WiFi, a slow chip) makes the hold effectively longer, so we expect delay to hurt in the same way, which the delay sweep will test.
+
+**Commands are clipped to −1..+1 inside the teacher.** The env would clip them anyway, but the student learns from the teacher's outputs, so those outputs must be the commands that were really applied, not impossible ones like 2.3.
+
+**Inverse kinematics needs an angle wrap.** An early version once returned −230° for the shoulder. That is the same direction as +130° taken the long way round, so the controller drove the shoulder into its −30° stop. The fix: always wrap angles into −180..180°.
 
 ---
 
-## Things learned while testing (for the teacher)
+## Results so far (exo arm, 100 seeds)
 
-**Inverse kinematics needs an angle wrap.** A rough IK once returned −230° for the shoulder. That is the same direction as +130° taken the long way round, so the controller drove the shoulder into its −30° stop. The fix is to always wrap angles into −180..180°.
+| Controller | Success | Final distance | Reward |
+|---|---|---|---|
+| random | 0% | 54.58 ± 29.40 cm | −31.85 ± 12.94 |
+| do-nothing | 0% | 65.76 ± 28.70 cm | −32.83 ± 14.35 |
+| PD teacher | 100% | 0.03 ± 0.05 cm | −6.87 ± 4.08 |
 
-**Stiffer is not better at 50 Hz (preliminary).** In a rough test, a gentle PD controller reached 100/100 targets, but stiffer settings reached only about 33–44%. The likely reason is that the command is only updated every 0.02 s, so a stiff controller overshoots between updates. If true, extra delay (WiFi, a slow chip) should make this worse, which is exactly what the delay sweep will measure.
+Random and do-nothing never reach a target: the floor. The teacher reaches all of them: the ceiling. Every later row (student, INT8, on-chip) lands somewhere between the two. Unlike Reacher, doing nothing does not win on reward here, because the effort penalty is small.
