@@ -4,7 +4,7 @@
 
 A simulated exoskeleton-style arm (MuJoCo, with gravity) controlled by a small neural network that is shrunk to 8-bit integers (INT8) and run on real low-power chips (Raspberry Pi Zero W, then ESP32-S3), with the simulator on a laptop in the loop. The goal is to measure where control quality breaks: lower precision, network delay, lost messages, and Linux board vs bare microcontroller.
 
-> **Status: work in progress (2 Nov 2026).** The arm, the environment, the baselines, the teacher, the float student, INT8 quantization, the precision sweep, the delay-trained student and the simulated delay/loss sweep are done. The hardware loop (Pi Zero W) is next.
+> **Status: work in progress (2 Nov 2026).** The arm, the environment, the baselines, the teacher, the float student, INT8 quantization, the precision sweep, the delay-trained student and the simulated delay/loss sweep are done. The hardware loop is built and tested against a stand-in "Pi" on the laptop (it reproduces the simulation's predictions exactly); runs on the real Pi Zero W are next.
 
 ## How it works
 
@@ -12,7 +12,7 @@ A simulated exoskeleton-style arm (MuJoCo, with gravity) controlled by a small n
 2. **Teacher:** a classical controller (PD + gravity compensation) that reaches targets using the true simulator state.
 3. **Student:** a small neural network that learns to copy the teacher from the 10 observation numbers only (behaviour cloning).
 4. **Quantization:** the student is converted to INT8 (and lower bit-widths) with our own NumPy code.
-5. **Hardware loop (planned):** the laptop runs the simulator, sends observations to the chip, and the chip sends back motor commands.
+5. **Hardware loop:** the laptop runs the simulator in real time, sends observations to the chip over UDP, and the chip sends back motor commands. Setup steps for the Pi: [pi/SETUP.md](pi/SETUP.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="media/loop_diagram_dark.png">
@@ -89,6 +89,13 @@ python -m venv .venv
 .venv/Scripts/python.exe sim/watch.py teacher   # watch in the 3D viewer
 ```
 
+Hardware loop with a stand-in "Pi" on the same laptop (two terminals):
+
+```bash
+.venv/Scripts/python.exe pi/pi_server.py                                   # terminal 1: the "chip"
+.venv/Scripts/python.exe sim/hw_loop.py --controller int8 --mode asap      # terminal 2: the arm
+```
+
 ## Files
 
 | File | What it is |
@@ -107,6 +114,10 @@ python -m venv .venv
 | `sim/delay_student.py` | Delay-trained students (one per delay, 20–100 ms) → `models/student_delay*.npz` |
 | `sim/delay_sweep.py` | Simulated delay, wrong-delay and lost-message tests → `results/delay_sweep.csv` |
 | `sim/evaluate.py` | Scores any controller on seeds 0..99, optionally through a simulated delayed / lossy network |
+| `pi/pi_server.py` | Runs on the chip: receives observations, runs the network, sends commands back (Python + NumPy only) |
+| `pi/protocol.py` | Message formats shared by the laptop and the chip (UDP) |
+| `pi/SETUP.md` | Step-by-step: flash the Pi, copy files, run the hardware tests |
+| `sim/hw_loop.py` | Laptop side of the hardware loop: real-time simulation, lockstep / ASAP / fixed-delay buffer, timing log |
 | `sim/make_charts.py` | Draws the loop diagram and the precision and delay charts (light + dark) |
 | `sim/make_gifs.py` | Records the README GIFs from the side camera |
 | `sim/watch.py` | Plays a controller in the live 3D window |

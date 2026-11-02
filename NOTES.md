@@ -161,6 +161,32 @@ Full numbers (including the wrong-delay table and the loss sweep) in `results/de
 
 ---
 
+## The hardware loop (`pi/pi_server.py`, `pi/protocol.py`, `sim/hw_loop.py`)
+
+**Built and tested before the Pi arrived.** The chip side (`pi_server.py`) is a plain Python + NumPy program, so it also runs on the laptop as a stand-in "Pi" on address 127.0.0.1. Everything was tested that way, so on the day only the address changes. The stand-in can also pretend to be a slow network (`--delay-ms`, `--jitter-ms`) to test how the laptop side handles late answers.
+
+**UDP, not TCP.** TCP re-sends lost messages and delivers them in order, which means one lost message holds up all the ones behind it. For control, a motor command that arrives late is worse than useless. UDP just sends each message once: if it is lost, it is lost, and the next one is already on its way. Each message carries an episode number (so leftovers from the previous episode are ignored) and a step number (so each answer is matched to the observation it answers). The formats live in one shared file, `protocol.py`, copied to both sides.
+
+**The arm runs in real time.** Every 20 ms of real (wall-clock) time the laptop moves the simulated arm on by 20 ms and sends the new observation. The laptop keeps checking for answers about every 0.5 ms while it waits, so each answer is time-stamped when it actually arrives. (A first version only checked once per step, which made every round trip look like ~20 ms.)
+
+**Three rules for using the answers.** *Lockstep*: wait for each answer before moving on (the arm "pauses"; not realistic, but it proves the chip computes the same answers as the laptop, and measures pure round-trip time). *ASAP*: at the start of each step, use the newest answer that has arrived; the delay is at least one step (20 ms) and varies with the network. *Buffer*: the answer to step t is used at exactly step t+k; anything later counts as lost. The command is always chosen at the start of a step from answers that already arrived (a first version also used answers arriving within the same step, which mixed zero-delay and one-step-delay steps and made results not comparable with the simulation).
+
+**Tested against the simulation's predictions (stand-in Pi on the laptop, 20 episodes):**
+
+| Setup | Loop result | Simulation predicted |
+|---|---|---|
+| INT8, lockstep | 100%, 0.24 ± 0.12 cm | 100%, 0.24 ± 0.12 cm (no delay) |
+| INT8, ASAP (round trip ~1 ms → 1 step) | 55%, 2.48 cm | 55%, 2.48 cm (20 ms delay) |
+| delay-trained 20 ms, buffer k=1 | 100%, 0.16 cm | 100%, 0.16 cm |
+
+The loop matches the simulation exactly, so the simulated delay sweep is a trustworthy prediction of the hardware, and any difference on the real Pi will come from its real timing.
+
+**Slow, jittery pretend network (round trip 36 ms on average, up to 60 ms):** plain INT8 in ASAP mode fell to 30% (its delay kept changing between 1 and 3 steps). Delay-trained student behind a 40 ms buffer: 100% (0.61 cm), even though 43% of answers arrived too late and were thrown away. Behind a 60 ms buffer: 100% (0.19 cm), 94% of answers used. This confirms the plan: measure the real round trip, choose k so that k × 20 ms is above its 99th percentile, and use the delay-trained student built for k.
+
+**Timing recorded for every message:** round-trip time (mean, median, 99th percentile, worst, and spread = jitter), how long the chip took to compute the answer (measured on the chip), whether the answer arrived at all, and how many steps later it was used. On the laptop stand-in, computing one answer takes ~0.15 ms; the Pi Zero is expected to be several times slower but still far below the 20 ms step.
+
+---
+
 ## Results so far (exo arm, 100 seeds)
 
 | Controller | Success | Final distance | Reward |
