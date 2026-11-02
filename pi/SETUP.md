@@ -14,7 +14,7 @@ address changes.
 
 Raspberry Pi Imager → **Raspberry Pi OS Lite (32-bit)** → choose the card → edit settings:
 
-- hostname `kote-pi`
+- hostname `arm-pi`
 - username and password (your choice)
 - WiFi: network name, password, country **IN**
 - Services: **enable SSH** (password login)
@@ -24,18 +24,18 @@ Put the card in the Pi, power it, wait ~2 minutes for the first boot.
 ## 3. Check you can reach it
 
 ```bash
-ping kote-pi.local
-ssh <user>@kote-pi.local
+ping arm-pi.local
+ssh <user>@arm-pi.local
 ```
 
-If `kote-pi.local` doesn't resolve, find the Pi's IP address in the router's device list and use that instead everywhere below.
+If `arm-pi.local` doesn't resolve, find the Pi's IP address in the router's device list and use that instead everywhere below.
 
 ## 4. Install NumPy on the Pi (on the Pi)
 
 ```bash
 sudo apt update
 sudo apt install -y python3-numpy
-mkdir -p ~/kote/models
+mkdir -p ~/arm-control/models
 ```
 
 Use `apt`, not `pip`: the Pi Zero's processor (ARMv6) has no ready-made pip packages, and building NumPy on it takes hours.
@@ -43,14 +43,14 @@ Use `apt`, not `pip`: the Pi Zero's processor (ARMv6) has no ready-made pip pack
 ## 5. Copy the files (on the laptop, from the repo folder)
 
 ```bash
-scp pi/pi_server.py pi/protocol.py sim/int8_net.py sim/student.py <user>@kote-pi.local:~/kote/
-scp models/student_int8.npz models/student_delay1_int8.npz models/student_delay2_int8.npz models/student_delay3_int8.npz models/student_delay4_int8.npz models/student_delay5_int8.npz <user>@kote-pi.local:~/kote/models/
+scp pi/pi_server.py pi/protocol.py sim/int8_net.py sim/student.py <user>@arm-pi.local:~/arm-control/
+scp models/student_int8.npz models/student_delay1_int8.npz models/student_delay2_int8.npz models/student_delay3_int8.npz models/student_delay4_int8.npz models/student_delay5_int8.npz <user>@arm-pi.local:~/arm-control/models/
 ```
 
 ## 6. Start the server (on the Pi)
 
 ```bash
-cd ~/kote && python3 pi_server.py
+cd ~/arm-control && python3 pi_server.py
 ```
 
 It prints the controllers it loaded and `listening on UDP port 5005`. Leave it running.
@@ -61,22 +61,22 @@ Each run takes about 2 minutes (100 episodes of 1 s in real time) and adds a row
 
 ```bash
 # 1. Correctness + raw timing: must match the laptop INT8 row (100%, 0.27 cm). Read the round-trip times.
-.venv/Scripts/python.exe sim/hw_loop.py --host kote-pi.local --controller int8 --mode lockstep
+.venv/Scripts/python.exe sim/hw_loop.py --host arm-pi.local --controller int8 --mode lockstep
 
 # 2. Realistic loop, plain INT8 student, answers used as they arrive
-.venv/Scripts/python.exe sim/hw_loop.py --host kote-pi.local --controller int8 --mode asap
+.venv/Scripts/python.exe sim/hw_loop.py --host arm-pi.local --controller int8 --mode asap
 
 # 3. Fixed-delay buffer + matching delay-trained student. Pick k so that k x 20 ms is above
 #    the 99% round-trip time from run 1 (e.g. 99% = 14 ms -> k = 1; 99% = 33 ms -> k = 2).
-.venv/Scripts/python.exe sim/hw_loop.py --host kote-pi.local --controller delay1 --mode buffer --k 1
+.venv/Scripts/python.exe sim/hw_loop.py --host arm-pi.local --controller delay1 --mode buffer --k 1
 
 # 4. Extra lost messages on top of the real network (repeat run 2 and 3 with these)
-.venv/Scripts/python.exe sim/hw_loop.py --host kote-pi.local --controller int8 --mode asap --loss 0.1
-.venv/Scripts/python.exe sim/hw_loop.py --host kote-pi.local --controller delay1 --mode buffer --k 1 --loss 0.3
+.venv/Scripts/python.exe sim/hw_loop.py --host arm-pi.local --controller int8 --mode asap --loss 0.1
+.venv/Scripts/python.exe sim/hw_loop.py --host arm-pi.local --controller delay1 --mode buffer --k 1 --loss 0.3
 ```
 
 ## If something doesn't work
 
-- **"no answer from the chip"**: is `pi_server.py` running on the Pi? Same WiFi network? Try the IP address instead of `kote-pi.local`.
+- **"no answer from the chip"**: is `pi_server.py` running on the Pi? Same WiFi network? Try the IP address instead of `arm-pi.local`.
 - **Windows firewall**: replies to messages the laptop sent are normally allowed. If not, allow Python for private networks when Windows asks.
 - **Timing looks bad**: keep the Pi close to the router, and close other heavy programs on the laptop (the summary prints "laptop overruns" if the laptop itself fell behind).

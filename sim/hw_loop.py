@@ -17,7 +17,7 @@ Scores the usual test episodes with the usual success rule, and records for ever
 the round-trip time, how long the chip took to compute, and when the answer was used.
 
   python sim/hw_loop.py --controller int8 --mode asap                 (stand-in Pi on this laptop)
-  python sim/hw_loop.py --host kote-pi.local --controller delay1 --mode buffer --k 1
+  python sim/hw_loop.py --host arm-pi.local --controller delay1 --mode buffer --k 1
 """
 import argparse
 import csv

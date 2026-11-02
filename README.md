@@ -1,4 +1,4 @@
-# Kote — quantized arm control on small chips
+# Quantized arm control on small chips
 
 <p align="center"><img src="media/hero.gif" width="480" alt="A seated figure wearing a two-joint arm exoskeleton reaches a red target ball five times; each reach is controlled by an 8-bit integer neural network of 5.4 KB."></p>
 
@@ -100,14 +100,14 @@ The loop reproduces the simulation's predictions, so the simulated delay sweep i
 
 ## Related work
 
-Running a quantized neural-network controller on a small chip is not new; Kote does not claim it is.
+Running a quantized neural-network controller on a small chip is not new; this project does not claim it is.
 
-- **QuaRL** (Krishnan et al., [arXiv 1910.01055](https://arxiv.org/abs/1910.01055); TMLR 2022): reinforcement-learning policies quantized to 6–8 bits without losing quality, comparing post-training quantization with quantization-aware training. Kote's sweep agrees: safe to 6 bits, breaks at 4.
-- **Learning Quantized Continuous Controllers for Integer Hardware** (Kresse & Lampert, [arXiv 2511.07046](https://arxiv.org/abs/2511.07046); L4DC 2026): quantization-aware training reaches 2–3-bit MuJoCo control policies on small FPGAs, and finds that rounding the inputs matters on its own. Kote's sweep supports this: rounding only the inputs to 4 bits hurts about as much as rounding only the weights.
+- **QuaRL** (Krishnan et al., [arXiv 1910.01055](https://arxiv.org/abs/1910.01055); TMLR 2022): reinforcement-learning policies quantized to 6–8 bits without losing quality, comparing post-training quantization with quantization-aware training. The sweep here agrees: safe to 6 bits, breaks at 4.
+- **Learning Quantized Continuous Controllers for Integer Hardware** (Kresse & Lampert, [arXiv 2511.07046](https://arxiv.org/abs/2511.07046); L4DC 2026): quantization-aware training reaches 2–3-bit MuJoCo control policies on small FPGAs, and finds that rounding the inputs matters on its own. The sweep here supports this: rounding only the inputs to 4 bits hurts about as much as rounding only the weights.
 - **Quantization of DRL models for embedded microcontrollers** (Bohm et al., ICRA 2026): quantized deep-RL control policies on microcontrollers.
-- **Quantized Deep Path-following Control on a Microcontroller** (Zometa & Faulwasser, [arXiv 2301.11909](https://arxiv.org/abs/2301.11909); ECC 2023): a network imitates a classical (predictive) controller and is quantized for a microcontroller, with an extra feedback law to correct quantization errors. Kote's teacher–student setup is similar in spirit.
+- **Quantized Deep Path-following Control on a Microcontroller** (Zometa & Faulwasser, [arXiv 2301.11909](https://arxiv.org/abs/2301.11909); ECC 2023): a network imitates a classical (predictive) controller and is quantized for a microcontroller, with an extra feedback law to correct quantization errors. The teacher–student setup here is similar in spirit.
 
-**What Kote adds:** an exoskeleton-style arm that has to carry its own motors against gravity; the same INT8 controller run with the simulator in the loop over a real network; measured break points for precision, delay and lost messages on one fixed test set; and a delay-trained student that beats its own teacher under delay, with the catch that it only works at the delay it was trained for.
+**What this project adds:** an exoskeleton-style arm that has to carry its own motors against gravity; the same INT8 controller run with the simulator in the loop over a real network; measured break points for precision, delay and lost messages on one fixed test set; and a delay-trained student that beats its own teacher under delay, with the catch that it only works at the delay it was trained for.
 
 ## Run it
 

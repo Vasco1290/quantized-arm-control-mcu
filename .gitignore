@@ -219,8 +219,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Kote: generated datasets (rebuild with sim/collect.py)
+# Generated datasets (rebuild with sim/collect.py)
 data/
 
-# Kote: private working notes for Claude Code (kept locally, not published)
+# Private working notes for Claude Code (kept locally, not published)
 CLAUDE.md

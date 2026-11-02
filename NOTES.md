@@ -1,4 +1,4 @@
-# Kote — design notes
+# Design notes
 
 One short paragraph per decision: what we chose and why. This becomes the README and the answers to interview questions.
 
