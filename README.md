@@ -2,9 +2,9 @@
 
 <p align="center"><img src="media/hero.gif" width="480" alt="A seated figure wearing a two-joint arm exoskeleton reaches a red target ball five times; each reach is controlled by an 8-bit integer neural network of 5.4 KB."></p>
 
-A simulated exoskeleton-style arm (MuJoCo, with gravity) controlled by a small neural network that is shrunk to 8-bit integers (INT8) and run on real low-power chips (Raspberry Pi Zero W, then ESP32-S3), with the simulator on a laptop in the loop. The goal is to measure where control quality breaks: lower precision, network delay, lost messages, and Linux board vs bare microcontroller.
+A simulated exoskeleton-style arm (MuJoCo, with gravity) controlled by a small neural network that is shrunk to 8-bit integers (INT8) and built to run on low-power chips (Raspberry Pi Zero W, then ESP32-S3), with the simulator on a laptop in the loop. The goal is to measure where control quality breaks: lower precision, network delay, lost messages, and Linux board vs bare microcontroller.
 
-> **Status (3 Nov 2026):** everything in simulation is done, and every controller runs in INT8. The hardware loop is built and tested against a stand-in "Pi" on the laptop, where it reproduces the simulation's predictions exactly. Runs on the real Pi Zero W are next (waiting for an SD card reader).
+> **Status (3 Nov 2026):** everything in simulation is done, and every controller runs in INT8. The hardware loop is built and tested against a stand-in "Pi" on the laptop, where it reproduces the simulation's predictions (same success rates, final distances within 0.01 cm). Runs on the real Pi Zero W are next (waiting for an SD card reader).
 
 ## How it works
 
@@ -68,7 +68,7 @@ Rounding only the 10 inputs hurts about as much as rounding only the weights: wi
 | 80 ms | 2% | 2% | 0% | 100% |
 | 100 ms | 1% | 2% | 3% | 100% |
 
-Delay hurts far more than lost messages (30% loss with no delay: 99%). A plain controller reacts to where the arm *was*, so it overshoots. The delay-trained student also sees the commands it already sent that have not landed yet, and learns to look ahead, so it beats its own teacher. **Limitation:** it only works at the delay it was built for (e.g. the 20 ms student gets 12% at 0 ms), so the hardware loop will use a fixed-delay buffer to keep the delay constant. Details in [NOTES.md](NOTES.md).
+Delay hurts far more than lost messages (30% loss with no delay: 99%). A plain controller reacts to where the arm *was*, so it overshoots. The delay-trained student also sees the commands it already sent that have not landed yet, and learns to look ahead, so it beats its own teacher. **Limitation:** it only works at the delay it was built for (e.g. the 20 ms student gets 12% at 0 ms), so the hardware loop uses a fixed-delay buffer to keep the delay constant. Details in [NOTES.md](NOTES.md).
 
 The delay-trained students also survive INT8: **100% at every delay from 20 to 100 ms**, with an average miss of 0.35–0.42 cm (float: 0.15–0.19 cm). These INT8 versions are what the chip runs.
 
@@ -89,14 +89,14 @@ The loop reproduces the simulation's predictions, so the simulated delay sweep i
 
 ## Limitations
 
-- **Simplified arm.** Two joints in one vertical plane, body parts as uniform capsules, no collisions, and no forces from the wearer: the exoskeleton moves a passive arm, it does not assist a person who is also pushing. Motors deliver the commanded torque instantly (no motor dynamics, current limits or gearbox friction beyond simple damping).
+- **Simplified arm.** Two joints in one vertical plane, body parts as uniform capsules, no collisions, and no forces from the wearer: the exoskeleton moves a passive arm, it does not assist a person who is also pushing. Motors deliver the commanded torque instantly, up to a fixed cap (30 N·m shoulder, 15 N·m elbow): no motor dynamics, no heating, and no gearbox friction beyond simple joint damping.
 - **The teacher is given a perfect model.** Its gravity compensation comes from the same physics model it controls. A real exoskeleton would have to measure or estimate masses and lengths, so the teacher (and the student copying it) would be less exact.
 - **Simple task.** Still targets, reached from the arm hanging down, judged after 1 second. No moving targets, no pushes or disturbances during a reach.
 - **100 test episodes.** One failure is one percentage point, so differences of a few points (e.g. 98% vs 100%) are within chance. Big gaps (100% vs 32%) are not.
 - **Simplest quantization only.** One shared scale per tensor, set after training (post-training quantization). No per-input or per-channel scales and no quantization-aware training, which is how others reach 2–3 bits (see below). Here 4 bits fails.
 - **The delay-trained student needs a known, fixed delay.** One model per delay, in steps of 20 ms. At the wrong delay it fails badly, so the loop forces the delay to be constant with a buffer, and throws away answers that arrive later than that.
 - **Network effects are simulated or local so far.** The delay and loss sweeps are simulated; the stand-in Pi runs on the same laptop (round trip ~1 ms), and its "slow WiFi" is a made-up random delay. Real WiFi timing comes from the Pi runs.
-- **Python on the chip.** The Pi runs NumPy, not hand-written integer code, so its timing includes Python's overhead. A bare-microcontroller (ESP32-S3) version in C is planned but not done.
+- **Python on the chip.** The Pi does the integer maths through NumPy in Python, not in compiled C, so its timing includes Python's overhead. A bare-microcontroller (ESP32-S3) version in C is planned but not done.
 
 ## Related work
 
@@ -107,7 +107,7 @@ Running a quantized neural-network controller on a small chip is not new; this p
 - **Quantization of DRL models for embedded microcontrollers** (Bohm et al., ICRA 2026): quantized deep-RL control policies on microcontrollers.
 - **Quantized Deep Path-following Control on a Microcontroller** (Zometa & Faulwasser, [arXiv 2301.11909](https://arxiv.org/abs/2301.11909); ECC 2023): a network imitates a classical (predictive) controller and is quantized for a microcontroller, with an extra feedback law to correct quantization errors. The teacher–student setup here is similar in spirit.
 
-**What this project adds:** an exoskeleton-style arm that has to carry its own motors against gravity; the same INT8 controller run with the simulator in the loop over a real network; measured break points for precision, delay and lost messages on one fixed test set; and a delay-trained student that beats its own teacher under delay, with the catch that it only works at the delay it was trained for.
+**What this project adds:** an exoskeleton-style arm that has to carry its own motors against gravity; the same INT8 controller run in real time with the simulator in the loop over UDP (so far against a stand-in chip; Pi Zero W runs next); measured break points for precision, delay and lost messages on one fixed test set; and a delay-trained student that beats its own teacher under delay, with the catch that it only works at the delay it was trained for.
 
 ## Run it
 
@@ -174,4 +174,5 @@ Hardware loop with a stand-in "Pi" on the same laptop (two terminals; on macOS /
 | `sim/make_gifs.py` | Records the README GIFs from the side camera |
 | `sim/watch.py` | Plays a controller in the live 3D window |
 | `sim/random_reacher.py` | Reacher-v5 warm-up (random baseline) |
+| `results/` | Sweep results (`precision_sweep.csv`, `delay_sweep.csv`) and hardware-loop logs (`hw/`) |
 | `NOTES.md` | Design decisions, one paragraph each |
